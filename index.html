@@ -114,31 +114,55 @@ import { optimizePDF } from "https://cdn.jsdelivr.net/npm/@privyid/ghoulscript@0
 
 function $(id){return document.getElementById(id)}
 
-const bridgeFrame=$('gasBridge');
+
+const bridgeFrame = $('gasBridge');
 let bridgeReadyResolve;
-const bridgeReadyPromise=new Promise(resolve=>{bridgeReadyResolve=resolve});
-const rpcPending=new Map();
+let bridgeReady = false;
 
-window.addEventListener('message',event=>{
-if(event.source!==bridgeFrame.contentWindow)return;
-const message=event.data||{};
-if(message.type==='BRIDGE_READY'){
-bridgeReadyResolve();
-return;
-}
-if(message.type==='RPC_RESULT'&&rpcPending.has(message.id)){
-const pending=rpcPending.get(message.id);
-rpcPending.delete(message.id);
-clearTimeout(pending.timer);
-if(message.ok)pending.resolve(message.data);
-else pending.reject(new Error(message.error||'Permintaan Google Drive gagal.'));
-}
+const bridgeReadyPromise = new Promise(resolve => {
+  bridgeReadyResolve = resolve;
 });
 
-bridgeFrame.addEventListener('load',()=>{
-bridgeFrame.contentWindow.postMessage({type:'PING'},'*');
+const rpcPending = new Map();
+
+window.addEventListener('message', event => {
+  if (event.source !== bridgeFrame.contentWindow) return;
+
+  const message = event.data || {};
+
+  if (message.type === 'BRIDGE_READY') {
+    if (!bridgeReady) {
+      bridgeReady = true;
+      clearInterval(pingTimer);
+      bridgeReadyResolve();
+      console.log('Google Apps Script Bridge terhubung.');
+    }
+    return;
+  }
+
+  if (message.type === 'RPC_RESULT' && rpcPending.has(message.id)) {
+    const pending = rpcPending.get(message.id);
+    rpcPending.delete(message.id);
+    clearTimeout(pending.timer);
+
+    if (message.ok) pending.resolve(message.data);
+    else pending.reject(new Error(message.error || 'Permintaan Google Drive gagal.'));
+  }
 });
-bridgeFrame.contentWindow.postMessage({type:'PING'},'*');
+
+const pingTimer = setInterval(() => {
+  if (bridgeReady) {
+    clearInterval(pingTimer);
+    return;
+  }
+
+  bridgeFrame.contentWindow.postMessage({ type: 'PING' }, '*');
+}, 1000);
+
+bridgeFrame.addEventListener('load', () => {
+  bridgeFrame.contentWindow.postMessage({ type: 'PING' }, '*');
+});
+
 
 function rpc(method,...args){
 return new Promise(async(resolve,reject)=>{
