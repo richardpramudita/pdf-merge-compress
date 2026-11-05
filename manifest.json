@@ -1,0 +1,26 @@
+
+{
+  "id": "./",
+  "name": "PDF Merge & Compress",
+  "short_name": "PDF Merge",
+  "description": "Gabungkan dan kompres PDF hingga di bawah 1 MB.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#17365d",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
