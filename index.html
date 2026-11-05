@@ -1,0 +1,369 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDF Merge & Compress</title>
+<meta name="theme-color" content="#17365d">
+<link rel="manifest" href="./manifest.json">
+<meta name="description" content="Gabungkan dan kompres PDF langsung di browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%2317365d'/%3E%3Ctext x='50' y='66' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3EPDF%3C/text%3E%3C/svg%3E">
+<style>
+:root{--p:#17365d;--bg:#f4f7fb;--card:#fff;--line:#dfe6ee}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Arial,system-ui;color:#18232e}
+header{background:var(--p);color:white;padding:25px 18px;border-radius:0 0 20px 20px}
+header h1{margin:0;font-size:23px}
+header p{margin:7px 0 0;font-size:13px;opacity:.9}
+main{max-width:700px;margin:auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:17px;margin-bottom:14px}
+.label{font-weight:bold;font-size:13px;margin-bottom:8px}
+.box{border:1px dashed #aebccc;border-radius:13px;padding:13px}
+.muted{font-size:12px;color:#697887;margin-top:5px;line-height:1.5}
+button{border:0;border-radius:11px;padding:12px 15px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.primary{background:var(--p);color:#fff;width:100%;padding:14px}
+.secondary{background:#eaf0f7;color:var(--p)}
+input[type=file]{display:none}
+input[type=text]{width:100%;padding:13px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin-top:8px}
+.full{width:100%;text-align:center;display:block;margin-top:9px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:11px;min-width:0}
+.stat small{display:block;color:#697887}
+.stat b{display:block;margin-top:4px;word-break:break-word}
+#status{display:none;margin-top:14px}
+.progress{height:9px;background:#e8edf3;border-radius:99px;overflow:hidden}
+.bar{height:100%;width:0;background:var(--p);transition:.25s}
+#result{display:none}
+.ok{color:#087443}
+.warn{color:#b42318}
+.note{background:#fff8e6;padding:11px;border-radius:10px;font-size:12px;color:#775500;line-height:1.5;margin-top:12px}
+footer{text-align:center;padding:20px 12px 28px;color:#697887;font-size:12px}
+</style>
+</head>
+<body>
+
+<iframe id="gasBridge" title="Koneksi Google Drive" aria-hidden="true"
+style="position:absolute;width:1px;height:1px;border:0;opacity:0;pointer-events:none"
+src="https://script.google.com/macros/s/AKfycbyk5oa_jpQyFxl9pGvKC1h3DnbUt2YG2atV2KRYfsXl4Qd7f5UTOwCVmj9xGk1cXOLf/exec"></iframe>
+
+<header>
+<h1>PDF Merge & Compress</h1>
+<p>Gabungkan dan kompres PDF langsung di browser.</p>
+</header>
+
+<main>
+<section class="card">
+<div class="label">PDF Default</div>
+<div class="box">
+<div id="defaultName">Memuat...</div>
+<div id="defaultInfo" class="muted"></div>
+</div>
+</section>
+
+<section class="card">
+<div class="label">PDF Tambahan</div>
+<div class="box">
+<div id="extraName">Belum dipilih</div>
+<div id="extraInfo" class="muted">Pilih satu PDF.</div>
+</div>
+<label class="full">
+<input id="fileInput" type="file" accept="application/pdf,.pdf">
+<button class="secondary" type="button" onclick="document.getElementById('fileInput').click()">Pilih PDF</button>
+</label>
+</section>
+
+<section class="card">
+<div class="label">Pengaturan PDF</div>
+<div class="stats">
+<div class="stat"><small>Urutan PDF</small><b>Default → Tambahan</b></div>
+<div class="stat"><small>Target ukuran</small><b>Kurang dari 1 MB</b></div>
+</div>
+<br>
+<div class="label">Nama File Hasil (sebelum upload)</div>
+<input id="fileName" type="text" maxlength="150" placeholder="Masukkan nama file PDF" value="PDF_Gabungan">
+<br><br>
+<button id="processBtn" class="primary" disabled>Proses PDF</button>
+<div id="status">
+<div id="statusText" style="font-size:13px;font-weight:bold;margin-bottom:7px"></div>
+<div class="progress"><div id="bar" class="bar"></div></div>
+</div>
+</section>
+
+<section id="result" class="card">
+<div class="label">Hasil Penggabungan</div>
+<div class="stats">
+<div class="stat"><small>Ukuran hasil</small><b id="resultSize">-</b></div>
+<div class="stat"><small>Status</small><b id="resultStatus">-</b></div>
+</div>
+<div id="driveInfo" class="muted" style="margin-top:10px"></div>
+<br>
+<button id="downloadBtn" class="primary">Download PDF</button>
+</section>
+</main>
+
+<footer>
+© 2026 PDF Merge & Compress. All rights reserved.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+<script type="module">
+import { optimizePDF } from "https://cdn.jsdelivr.net/npm/@privyid/ghoulscript@0.1.0-alpha.4/+esm";
+
+function $(id){return document.getElementById(id)}
+
+const bridgeFrame=$('gasBridge');
+let bridgeReadyResolve;
+const bridgeReadyPromise=new Promise(resolve=>{bridgeReadyResolve=resolve});
+const rpcPending=new Map();
+
+window.addEventListener('message',event=>{
+if(event.source!==bridgeFrame.contentWindow)return;
+const message=event.data||{};
+if(message.type==='BRIDGE_READY'){
+bridgeReadyResolve();
+return;
+}
+if(message.type==='RPC_RESULT'&&rpcPending.has(message.id)){
+const pending=rpcPending.get(message.id);
+rpcPending.delete(message.id);
+clearTimeout(pending.timer);
+if(message.ok)pending.resolve(message.data);
+else pending.reject(new Error(message.error||'Permintaan Google Drive gagal.'));
+}
+});
+
+bridgeFrame.addEventListener('load',()=>{
+bridgeFrame.contentWindow.postMessage({type:'PING'},'*');
+});
+bridgeFrame.contentWindow.postMessage({type:'PING'},'*');
+
+function rpc(method,...args){
+return new Promise(async(resolve,reject)=>{
+const id='req_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+const timer=setTimeout(()=>{
+rpcPending.delete(id);
+reject(new Error('Waktu koneksi habis. Periksa akses Google Apps Script dan muat ulang halaman.'));
+},120000);
+rpcPending.set(id,{resolve,reject,timer});
+try{
+await Promise.race([
+bridgeReadyPromise,
+new Promise((_,fail)=>setTimeout(()=>fail(new Error('Bridge belum siap. Periksa URL deployment dan ALLOWED_ORIGINS.')),30000))
+]);
+bridgeFrame.contentWindow.postMessage({type:'RPC',id,method,args},'*');
+}catch(error){
+clearTimeout(timer);
+rpcPending.delete(id);
+reject(error);
+}
+});
+}
+
+const TARGET=1000000;
+let extraFile=null;
+let savedFile=null;
+let defaultAvailable=false;
+
+function fmt(n){
+return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+}
+function status(text,percent){
+$('status').style.display='block';
+$('statusText').textContent=text;
+$('bar').style.width=percent+'%';
+}
+function b64ToBytes(b64){
+const bin=atob(b64);
+const out=new Uint8Array(bin.length);
+for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);
+return out;
+}
+function bytesToB64(bytes){
+let result='';
+const step=0x8000;
+for(let i=0;i<bytes.length;i+=step){
+result+=String.fromCharCode(...bytes.subarray(i,i+step));
+}
+return btoa(result);
+}
+function safeName(name){
+return String(name).replace(/[\\/:*?"<>|]/g,'_').trim().replace(/\.pdf$/i,'')||'PDF_Gabungan';
+}
+
+$('fileName').value='PDF_Gabungan_'+new Date().toISOString().slice(0,10);
+
+rpc('getConfig').then(c=>{
+defaultAvailable=c.defaultExists;
+$('defaultName').textContent=c.defaultExists?c.defaultName:'PDF default belum ditemukan';
+$('defaultInfo').textContent=c.defaultExists?'PDF master bersama: '+c.folderName:'Periksa ID PDF master pada Code.gs.';
+updateProcessButton();
+}).catch(e=>{
+$('defaultName').textContent='Gagal menghubungkan Google Drive';
+$('defaultInfo').textContent='Periksa URL Apps Script, izin akses, dan konfigurasi origin.';
+console.error(e);
+alert('Koneksi Google Drive gagal: '+(e.message||e));
+});
+
+function updateProcessButton(){
+$('processBtn').disabled=!defaultAvailable||!extraFile;
+}
+
+$('fileInput').onchange=e=>{
+const file=e.target.files[0]||null;
+savedFile=null;
+extraFile=null;
+$('result').style.display='none';
+if(!file){
+$('extraName').textContent='Belum dipilih';
+$('extraInfo').textContent='Pilih satu PDF.';
+updateProcessButton();
+return;
+}
+if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf')){
+alert('File harus berformat PDF.');
+e.target.value='';
+$('extraName').textContent='Belum dipilih';
+$('extraInfo').textContent='Pilih satu PDF.';
+updateProcessButton();
+return;
+}
+extraFile=file;
+$('extraName').textContent=file.name;
+$('extraInfo').textContent=fmt(file.size);
+updateProcessButton();
+};
+
+async function mergeAndOptimize(defaultBytes,extraBytes){
+status('Membaca PDF Default...',25);
+const PDFDocument=PDFLib.PDFDocument;
+const pdfA=await PDFDocument.load(defaultBytes.slice(),{ignoreEncryption:false});
+status('Membaca PDF Tambahan...',40);
+const pdfB=await PDFDocument.load(extraBytes.slice(),{ignoreEncryption:false});
+const merged=await PDFDocument.create();
+
+status('Menggabungkan halaman Default...',50);
+const pagesA=await merged.copyPages(pdfA,pdfA.getPageIndices());
+pagesA.forEach(page=>merged.addPage(page));
+
+status('Menggabungkan halaman Tambahan...',60);
+const pagesB=await merged.copyPages(pdfB,pdfB.getPageIndices());
+pagesB.forEach(page=>merged.addPage(page));
+
+merged.setTitle('PDF Gabungan');
+merged.setSubject('PDF Merge & Compress');
+
+status('Menyusun PDF gabungan...',68);
+const mergedBytes=await merged.save({useObjectStreams:true,addDefaultPage:false});
+
+status('Memuat mesin kompresi gratis...',72);
+const mergedFile=new File([mergedBytes],'PDF_Gabungan.pdf',{type:'application/pdf'});
+
+status('Mengompres PDF (kualitas seimbang)...',80);
+let compressed=await optimizePDF(mergedFile,{
+pdfSettings:'ebook',
+colorImageResolution:150,
+grayImageResolution:150,
+monoImageResolution:300,
+colorConversionStrategy:'RGB',
+fastWebView:false,
+noTransparency:false
+});
+let output=new Uint8Array(compressed);
+
+if(output.byteLength>=TARGET){
+status('Ukuran masih besar. Mencoba kompresi lebih kuat...',88);
+const retryFile=new File([mergedBytes],'PDF_Gabungan.pdf',{type:'application/pdf'});
+compressed=await optimizePDF(retryFile,{
+pdfSettings:'screen',
+colorImageResolution:96,
+grayImageResolution:96,
+monoImageResolution:200,
+colorConversionStrategy:'RGB',
+fastWebView:false,
+noTransparency:false
+});
+output=new Uint8Array(compressed);
+}
+const signature=new TextDecoder().decode(output.slice(0,5));
+if(signature!=='%PDF-')throw new Error('Mesin kompresi tidak menghasilkan PDF yang valid.');
+return output;
+}
+
+$('processBtn').onclick=async()=>{
+if(!defaultAvailable){alert('PDF Default belum tersedia.');return;}
+if(!extraFile){alert('Pilih PDF tambahan terlebih dahulu.');return;}
+
+const requestedName=safeName($('fileName').value);
+if(!requestedName){
+alert('Masukkan nama file hasil sebelum memulai proses.');
+$('fileName').focus();
+return;
+}
+
+$('processBtn').disabled=true;
+$('result').style.display='none';
+savedFile=null;
+
+try{
+status('Mengambil PDF Default...',10);
+const d=await rpc('getDefaultPdfBase64');
+status('Mempersiapkan kedua PDF...',20);
+const defaultBytes=b64ToBytes(d.base64);
+const extraBytes=new Uint8Array(await extraFile.arrayBuffer());
+
+const resultBytes=await mergeAndOptimize(defaultBytes,extraBytes);
+const size=resultBytes.length;
+
+if(size>=TARGET){
+$('resultSize').textContent=fmt(size);
+$('resultStatus').textContent='Gagal mencapai target';
+$('resultStatus').className='warn';
+throw new Error('Ukuran hasil setelah optimasi adalah '+fmt(size)+'. Target harus kurang dari 1 MB. File tidak diunggah.');
+}
+
+status('Mengunggah PDF teroptimasi ke folder Hasil...',92);
+const saved=await rpc('saveResult',bytesToB64(resultBytes),requestedName+'.pdf');
+savedFile=saved;
+
+$('result').style.display='block';
+$('resultSize').textContent=fmt(saved.size);
+$('resultStatus').textContent='Berhasil < 1 MB';
+$('resultStatus').className='ok';
+$('driveInfo').textContent='Nama file: '+saved.name+' | Folder: Hasil';
+status('Selesai! PDF berhasil dikompres dan diunggah.',100);
+$('result').scrollIntoView({behavior:'smooth',block:'start'});
+
+}catch(e){
+console.error(e);
+status('Proses tidak berhasil.',0);
+alert('Gagal: '+(e.message||e));
+}finally{
+updateProcessButton();
+}
+};
+
+$('downloadBtn').onclick=()=>{
+if(!savedFile){
+alert('Belum ada PDF yang berhasil diunggah.');
+return;
+}
+const link=document.createElement('a');
+link.href=savedFile.downloadUrl;
+link.target='_blank';
+link.rel='noopener';
+document.body.appendChild(link);
+link.click();
+link.remove();
+};
+
+if('serviceWorker'in navigator){
+window.addEventListener('load',()=>{
+navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('Service worker tidak dapat didaftarkan:',err));
+});
+}
+</script>
+</body>
+</html>
